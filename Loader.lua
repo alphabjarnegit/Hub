@@ -1,102 +1,82 @@
--- Loader.lua
--- Script in ServerScriptService.
--- Voraussetzungen (Game Settings bzw. Explorer):
---   * Security -> "Allow HTTP Requests" an
---   * ServerScriptService.LoadStringEnabled = true
---
--- Neu laden: Attribut "Reload" am Script umschalten (z. B. in der Command Bar:
---   game.ServerScriptService.Loader:SetAttribute("Reload", os.clock())
--- ) oder die BindableFunction "ReloadRuntime" aufrufen.
+-- Loader.lua (Client-side / Executor)
+local ENV = getgenv()
+local REPO_URL = "https://raw.githubusercontent.com/alphabjarnegit/Hub/main/"
 
-local HttpService = game:GetService("HttpService")
-
-local SOURCE_URL = "https://raw.githubusercontent.com/alphabjarnegit/Hub/main/Main.lua"
-
-local reloading = false -- verhindert, dass zwei Reloads gleichzeitig laufen
-
--- Alte Version sicher entladen
-local function unloadActive()
-	local active = _G.ActiveRuntimeModule
-	if active == nil then
-		return
-	end
-	if type(active) == "table" and type(active.Unload) == "function" then
-		local ok, err = pcall(active.Unload)
-		if not ok then
-			warn("[Loader] Fehler beim Entladen:", err)
-		end
-	end
-	_G.ActiveRuntimeModule = nil
+-- 1. Alte Loader-Instanz schließen, falls vorhanden
+if ENV.ActiveLoaderWindow then
+    pcall(function() ENV.ActiveLoaderWindow:Destroy() end)
+    ENV.ActiveLoaderWindow = nil
 end
 
--- Neue Version holen, kompilieren und ausführen.
--- Gibt true zurück, wenn alles geklappt hat, sonst false + Fehlertext.
-local function reload(): (boolean, string?)
-	if reloading then
-		return false, "Reload läuft bereits"
-	end
-	reloading = true
+-- 2. UILibrary dynamisch laden
+local uiLibCode = game:HttpGet(REPO_URL .. "UILibrary.lua?t=" .. DateTime.now().UnixTimestampMillis)
+local UILibrary = loadstring(uiLibCode)()
 
-	-- 1. Download zuerst: Schlägt er fehl, läuft die alte Version weiter.
-	--    Der Zeitstempel umgeht den Cache von GitHub Raw (sonst bis zu 5 min alt).
-	local okHttp, code = pcall(HttpService.GetAsync, HttpService,
-		SOURCE_URL .. "?t=" .. DateTime.now().UnixTimestampMillis, true)
-	if not okHttp then
-		reloading = false
-		return false, "HTTP-Fehler: " .. tostring(code)
-	end
+-- 3. Loader-Fenster erstellen
+local window = UILibrary.CreateWindow("Script Dashboard", UDim2.fromOffset(480, 320))
+ENV.ActiveLoaderWindow = window
 
-	-- 2. Kompilieren: Bei Syntaxfehler bleibt ebenfalls die alte Version aktiv.
-	local fn, compileErr = loadstring(code, "=Main")
-	if not fn then
-		reloading = false
-		return false, "Syntaxfehler: " .. tostring(compileErr)
-	end
+-- Tab erstellen
+local mainTab = window:AddTab("Dashboard")
 
-	-- 3. Erst jetzt die alte Version entladen.
-	unloadActive()
+-- Grid-Layout für die 4 Buttons
+local grid = Instance.new("UIGridLayout")
+grid.CellSize = UDim2.new(0.5, -8, 0.5, -8)
+grid.CellPadding = UDim2.new(0, 10, 0, 10)
+grid.Parent = mainTab
 
-	-- 4. Ausführen
-	local okRun, result = pcall(fn)
-	if not okRun then
-		-- Main trägt sich am Anfang selbst in _G ein, also Reste entfernen
-		unloadActive()
-		reloading = false
-		return false, "Laufzeitfehler: " .. tostring(result)
-	end
-
-	if type(result) ~= "table" or type(result.Unload) ~= "function" then
-		unloadActive()
-		reloading = false
-		return false, "Main.lua hat kein Modul mit Unload() zurückgegeben"
-	end
-
-	_G.ActiveRuntimeModule = result
-	reloading = false
-	return true, nil
+-- Hilfsfunktion zum sicheren Nachladen von Skripten
+local function executeRemote(url)
+    task.spawn(function()
+        local success, code = pcall(function() 
+            return game:HttpGet(url .. "?t=" .. DateTime.now().UnixTimestampMillis) 
+        end)
+        if success then
+            local fn, err = loadstring(code)
+            if fn then 
+                pcall(fn) 
+            else 
+                warn("[Loader] Syntaxfehler:", err) 
+            end
+        else
+            warn("[Loader] HTTP-Fehler:", code)
+        end
+    end)
 end
 
-local function reloadAndReport()
-	local ok, err = reload()
-	if ok then
-		print("[Loader] Neue Version aktiv")
-	else
-		warn("[Loader]", err)
-	end
-	return ok, err
+-- Feld 1: Cobalt
+window:AddButton(mainTab, "Load Cobalt UI", function()
+    executeRemote("https://gitlab.com/upio/cobalt/-/releases/permalink/latest/downloads/Cobalt.luau")
+end)
+
+-- Feld 2: Dex Explorer
+window:AddButton(mainTab, "Load Dex Explorer", function()
+    executeRemote("https://github.com/AZYsGithub/DexPlusPlus/releases/latest/download/out.lua")
+end)
+
+-- Feld 3: Infinite Yield
+window:AddButton(mainTab, "Load Infinite Yield", function()
+    executeRemote("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source")
+end)
+
+-- Feld 4: Game Detected (prüft /games/<PlaceId>.lua im Repo)
+local placeId = game.PlaceId
+local gameScriptUrl = REPO_URL .. "games/" .. tostring(placeId) .. ".lua"
+
+local scriptExists = pcall(function() 
+    local res = game:HttpGet(gameScriptUrl)
+    return res and #res > 0 and not res:find("404")
+end)
+
+local btnLabel = scriptExists and ("Game Detected (" .. placeId .. ")") or ("No Script for ID " .. placeId)
+
+local gameBtn = window:AddButton(mainTab, btnLabel, function()
+    if scriptExists then
+        executeRemote(gameScriptUrl)
+    end
+end)
+
+if not scriptExists and gameBtn then
+    gameBtn.AutoButtonColor = false
+    gameBtn.BackgroundTransparency = 0.5
 end
-
--- Auslöser 1: Attribut am Script
-script:GetAttributeChangedSignal("Reload"):Connect(reloadAndReport)
-
--- Auslöser 2: BindableFunction für andere Server-Skripte / Admin-Befehle
-local bindable = Instance.new("BindableFunction")
-bindable.Name = "ReloadRuntime"
-bindable.OnInvoke = reloadAndReport
-bindable.Parent = script
-
--- Beim Serverstart einmal laden
-reloadAndReport()
-
--- Beim Herunterfahren sauber entladen
-game:BindToClose(unloadActive)
