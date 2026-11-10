@@ -21,11 +21,22 @@ ENV.ActiveLoaderWindow = window
 -- Tab erstellen
 local mainTab = window:AddTab("Dashboard")
 
--- Grid-Layout für die 4 Buttons
+-- Grid-Layout für die 4 Buttons vorbereiten
 local grid = Instance.new("UIGridLayout")
 grid.CellSize = UDim2.new(0.5, -8, 0.5, -8)
 grid.CellPadding = UDim2.new(0, 10, 0, 10)
-grid.Parent = mainTab
+
+-- Automatisch das echte UI-Instance-Objekt aus der Tab-Tabelle herausfiltern
+local targetInstance = mainTab
+if type(mainTab) == "table" then
+    for _, v in pairs(mainTab) do
+        if typeof(v) == "Instance" then
+            targetInstance = v
+            break
+        end
+    end
+end
+grid.Parent = targetInstance
 
 -- Hilfsfunktion zum sicheren Nachladen von Skripten
 local function executeRemote(url)
