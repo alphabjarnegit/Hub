@@ -10,7 +10,7 @@
 
 local HttpService = game:GetService("HttpService")
 
-local SOURCE_URL = "https://raw.githubusercontent.com/alphabjarnegit/roblox-hot-reload/main/Main.lua"
+local SOURCE_URL = "https://raw.githubusercontent.com/alphabjarnegit/alpha/main/Main.lua"
 
 local reloading = false -- verhindert, dass zwei Reloads gleichzeitig laufen
 
