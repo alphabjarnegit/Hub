@@ -1,6 +1,6 @@
 -- Loader.lua (Client-side / Executor)
 local ENV = getgenv()
-local REPO_URL = "https://raw.githubusercontent.com/alphabjarnegit/Hub/main/"
+local REPO_URL = "https://github.com/alphabjarnegit/Hub"
 
 -- 1. Alte Loader-Instanz schließen, falls vorhanden
 if ENV.ActiveLoaderWindow then
