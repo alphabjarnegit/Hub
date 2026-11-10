@@ -8,6 +8,8 @@ if ENV.ActiveLoaderWindow then
     ENV.ActiveLoaderWindow = nil
 end
 
+print("[Loader] Version 1.0 geladen")
+
 -- 2. UILibrary dynamisch laden
 local uiLibCode = game:HttpGet(REPO_URL .. "UILibrary.lua?t=" .. DateTime.now().UnixTimestampMillis)
 local UILibrary = loadstring(uiLibCode)()
